@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Seguimiento - OPPMI</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome para los Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Librerías de React (Versiones estables) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- PropTypes (Requisito de Recharts) -->
+    <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    
+    <!-- Recharts (Gráficas) -->
+    <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    
+    <!-- Babel (Para compilar React en el navegador) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-[#f8fafc]">
+    <!-- Contenedor principal de la App -->
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = window.Recharts;
+
+        // Configuración de rangos
+        const TITULOS_RANGOS = {
+          vencido: "Vencidos (>30d)",
+          riesgo: "Riesgo Crítico (15-29d)",
+          preventiva: "Alerta Preventiva (6-14d)",
+          plazo: "Dentro de Plazo (0-5d)"
+        };
+
+        const categorizarPorDias = (dias) => {
+          if (dias >= 30) return "Vencido";
+          if (dias >= 15 && dias <= 29) return "Riesgo crítico";
+          if (dias >= 6 && dias <= 14) return "Alerta preventiva";
+          return "Dentro de plazo";
+        };
+
+        const COLORS = {
+          vencido: '#ef4444', 
+          riesgo: '#f59e0b',  
+          preventiva: '#a855f7',
+          plazo: '#10b981',   
+          otros: '#6366f1'    
+        };
+
+        const App = () => {
+          const [data, setData] = useState([]);
+          const [searchTerm, setSearchTerm] = useState('');
+          const [filterEtiqueta, setFilterEtiqueta] = useState('Todos');
+          const [filterEstado, setFilterEstado] = useState('Todos');
+
+          useEffect(() => {
+            const baseData = [
+              { id: "0000128675", fecha: "04/03/2026", remitente: "OFICINA DE PRESUPUESTO - SILVA", tipo: "PROVEIDO", nroDoc: "D001013-2026", destinatario: "ORDUÑA VEGA LENA MARICE", asunto: "PROPUESTA DE MODELO DE INFORME PARA SUSTENTAR MODIFICACIONES", expediente: "GICA0020260000290", estado: "NO LEIDO", dias: 41, etiqueta: "Vencido" },
+              { id: "0000154429", fecha: "16/03/2026", remitente: "OFICINA DE PRESUPUESTO - MANYARI", tipo: "PROVEIDO", nroDoc: "D001163-2026", destinatario: "MOZOMBITE TORRES JOHNNY", asunto: "REMISIÓN DE INFORME Y SOLICITUD DE ACCIONES", expediente: "2026-0008443", estado: "RECIBIDO", dias: 29, etiqueta: "Riesgo crítico" },
+              { id: "0000159812", fecha: "18/03/2026", remitente: "OFICINA DE PRESUPUESTO - SILVA", tipo: "PROVEIDO", nroDoc: "D001201-2026", destinatario: "CHUQUICHAICO INGA MAGALY MARIA", asunto: "REVISIÓN DE EXPEDIENTE TÉCNICO Y SOLICITUD DE RECURSOS", expediente: "2026-0009122", estado: "RECIBIDO", dias: 27, etiqueta: "Riesgo crítico" },
+              { id: "0000214877", fecha: "13/04/2026", remitente: "OFICINA DE PRESUPUESTO - NOE", tipo: "PROVEIDO", nroDoc: "D001541-2026", destinatario: "GRANADOS CENTURION GUISELLA MAGALY", asunto: "CORREGIR LAS SITUACIONES ADVERSAS FORMULADAS EN LOS INFORMES", expediente: "SG000020260000239", estado: "NO LEIDO", dias: 1, etiqueta: "Dentro de plazo" },
+              { id: "0000214881", fecha: "13/04/2026", remitente: "OFICINA DE PRESUPUESTO - NOE", tipo: "PROVEIDO", nroDoc: "D001542-2026", destinatario: "CHUQUICHAICO INGA MAGALY MARIA", asunto: "SOLICITUD DE MODIFICACIÓN PRESUPUESTAL PARA ATENCIÓN DE LOCACIÓN DE SERVICIOS.", expediente: "DGCCD020260000202", estado: "RECIBIDO", dias: 1, etiqueta: "Dentro de plazo" },
+              { id: "0000215159", fecha: "14/04/2026", remitente: "OFICINA DE PRESUPUESTO - SILVA", tipo: "PROVEIDO", nroDoc: "D001549-2026", destinatario: "ARANGO AYALA OSCAR BENJAMIN", asunto: "SOLICITUD DE RECURSOS PRESUPUESTALES", expediente: "2026-0001234", estado: "NO LEIDO", dias: 0, etiqueta: "Dentro de plazo" }
+            ];
+            setData(baseData);
+          }, []);
+
+          // Helper robusto
+          const safeTrim = (val) => {
+            return (val !== undefined && val !== null) ? String(val).trim() : '';
+          };
+
+          const parseCSV = (text) => {
+            const firstLineIdx = text.indexOf('\n');
+            const firstLine = firstLineIdx > -1 ? text.substring(0, firstLineIdx) : text;
+            const delimiter = firstLine.includes(';') ? ';' : ',';
+            
+            const results = [];
+            let current = '';
+            let row = [];
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+              const char = text[i];
+              const nextChar = text[i+1];
+              
+              if (char === '"') {
+                if (inQuotes && nextChar === '"') { current += '"'; i++; } 
+                else { inQuotes = !inQuotes; }
+              } else if (char === delimiter && !inQuotes) {
+                row.push(current); current = '';
+              } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                if (char === '\r' && nextChar === '\n') i++; 
+                row.push(current);
+                if (row.some(function(cell) { return cell.trim() !== ''; })) { results.push(row); }
+                row = []; current = '';
+              } else {
+                current += char;
+              }
+            }
+            if (current || row.length > 0) { row.push(current); results.push(row); }
+            if (results.length < 2) return [];
+
+            let headerRowIndex = 0;
+            for (let i = 0; i < Math.min(10, results.length); i++) {
+              if (results[i].some(function(cell) { return cell.toUpperCase().includes('NRO DE EMISI'); })) { 
+                headerRowIndex = i; break; 
+              }
+            }
+            
+            const headers = results[headerRowIndex].map(function(h) { return h.trim().toUpperCase(); });
+            
+            const colIdx = {
+              id: headers.findIndex(function(h) { return h.includes('NRO DE EMISI'); }),
+              fecha: headers.findIndex(function(h) { return h.includes('FECHA EMISI'); }),
+              remitente: headers.findIndex(function(h) { return h.includes('REMITENTE'); }),
+              tipo: headers.findIndex(function(h) { return h.includes('TIPO DOCUMENTO'); }),
+              nroDoc: headers.findIndex(function(h) { return h.includes('NRO DOCUMENTO'); }),
+              destinatario: headers.findIndex(function(h) { return h.includes('DESTINA'); }),
+              asunto: headers.findIndex(function(h) { return h.includes('ASUNTO'); }),
+              expediente: headers.findIndex(function(h) { return h.includes('EXPEDIENTE'); }),
+              estado: headers.findIndex(function(h) { return h.includes('ESTADO'); }),
+              dias: headers.findIndex(function(h) { return h.includes('DIAS') || h.includes('DÍAS'); }),
+            };
+
+            return results.slice(headerRowIndex + 1).map(function(r) {
+              const idVal = colIdx.id > -1 ? r[colIdx.id] : r[0];
+              if (!idVal || safeTrim(idVal) === '') return null;
+              
+              let diasNum = colIdx.dias > -1 ? parseFloat(r[colIdx.dias]) : parseFloat(r[9]);
+              if (isNaN(diasNum)) diasNum = 0;
+
+              return {
+                id: safeTrim(idVal),
+                fecha: safeTrim(colIdx.fecha > -1 ? r[colIdx.fecha] : r[1]),
+                remitente: safeTrim(colIdx.remitente > -1 ? r[colIdx.remitente] : r[2]),
+                tipo: safeTrim(colIdx.tipo > -1 ? r[colIdx.tipo] : r[3]),
+                nroDoc: safeTrim(colIdx.nroDoc > -1 ? r[colIdx.nroDoc] : r[4]),
+                destinatario: safeTrim(colIdx.destinatario > -1 ? r[colIdx.destinatario] : r[5]),
+                asunto: safeTrim(colIdx.asunto > -1 ? r[colIdx.asunto] : r[6]).replace(/\n/g, ' ').replace(/\r/g, ''),
+                expediente: safeTrim(colIdx.expediente > -1 ? r[colIdx.expediente] : r[7]),
+                estado: safeTrim(colIdx.estado > -1 ? r[colIdx.estado] : r[8]),
+                dias: diasNum,
+                etiqueta: categorizarPorDias(diasNum)
+              };
+            }).filter(Boolean);
+          };
+
+          const handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                const text = event.target.result;
+                const newData = parseCSV(text);
+                if (newData.length > 0) setData(newData);
+              };
+              reader.readAsText(file);
+            }
+          };
+
+          const stats = useMemo(() => ({
+            total: data.length,
+            vencidos: data.filter(function(d) { return (d.etiqueta || '').toLowerCase().includes('vencido'); }).length,
+            riesgo: data.filter(function(d) { return (d.etiqueta || '').toLowerCase().includes('riesgo'); }).length,
+            preventiva: data.filter(function(d) { return (d.etiqueta || '').toLowerCase().includes('preventiva'); }).length,
+            enPlazo: data.filter(function(d) { return (d.etiqueta || '').toLowerCase().includes('plazo'); }).length,
+          }), [data]);
+
+          const chartData = useMemo(() => {
+            const counts = {};
+            data.forEach(function(d) {
+              const key = d.etiqueta || 'Otros';
+              counts[key] = (counts[key] || 0) + 1;
+            });
+            return Object.keys(counts).map(function(key) { return { name: key, value: counts[key] }; });
+          }, [data]);
+
+          const barData = useMemo(() => {
+            const destCounts = {};
+            data.forEach(function(d) {
+              const parts = (d.destinatario || '').trim().split(/\s+/) || [];
+              let shortName = d.destinatario || "Sin Asignar";
+              if (parts.length >= 3) {
+                shortName = `${parts[2]} ${parts[0]}`; 
+              } else if (parts.length === 2) {
+                shortName = `${parts[1]} ${parts[0]}`; 
+              }
+              destCounts[shortName] = (destCounts[shortName] || 0) + 1;
+            });
+            return Object.keys(destCounts)
+              .map(function(name) { return { name: name, documentos: destCounts[name] }; })
+              .sort(function(a, b) { return b.documentos - a.documentos; })
+              .slice(0, 10);
+          }, [data]);
+
+          const filteredData = data.filter(function(item) {
+            const searchStr = searchTerm.toLowerCase();
+            const matchesSearch = 
+              (item.id || '').toLowerCase().includes(searchStr) ||
+              (item.asunto || '').toLowerCase().includes(searchStr) ||
+              (item.destinatario || '').toLowerCase().includes(searchStr) ||
+              (item.expediente || '').toLowerCase().includes(searchStr);
+            
+            const matchesFilter = filterEtiqueta === 'Todos' || item.etiqueta === filterEtiqueta;
+            const matchesEstado = filterEstado === 'Todos' || (item.estado || '').toUpperCase() === filterEstado;
+            
+            return matchesSearch && matchesFilter && matchesEstado;
+          });
+
+          return (
+            <div className="min-h-screen bg-[#f8fafc] p-4 md:p-8 font-sans text-slate-900">
+              <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="bg-indigo-600 p-4 rounded-3xl shadow-xl shadow-indigo-100 rotate-3">
+                    <i className="fa-solid fa-arrow-trend-up text-white text-[28px]"></i>
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">Panel de Seguimiento</h1>
+                    <p className="text-slate-500 font-bold flex items-center gap-2 mt-1">
+                      <i className="fa-solid fa-calendar-days text-indigo-400"></i> Base procesada: {data.length} documentos cargados
+                    </p>
+                  </div>
+                </div>
+                
+                <label className="flex items-center gap-4 bg-white px-6 py-4 border-2 border-dashed border-slate-200 rounded-[2rem] cursor-pointer hover:border-indigo-400 hover:bg-indigo-50 transition-all shadow-sm group">
+                  <i className="fa-solid fa-upload text-indigo-600 text-2xl group-hover:scale-110 transition-transform"></i>
+                  <div className="text-left">
+                    <span className="block text-sm font-black text-slate-800 tracking-tight">Cargar Base de Datos CSV</span>
+                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Automático ( ; o , )</span>
+                  </div>
+                  <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
+                </label>
+              </header>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-10">
+                <StatCard title="Total Pendientes" value={stats.total} iconClass="fa-solid fa-file-lines" color="text-indigo-600" bg="bg-indigo-50" />
+                <StatCard title={TITULOS_RANGOS.vencido} value={stats.vencidos} iconClass="fa-solid fa-triangle-exclamation" color="text-red-600" bg="bg-red-50" />
+                <StatCard title={TITULOS_RANGOS.riesgo} value={stats.riesgo} iconClass="fa-solid fa-clock" color="text-amber-600" bg="bg-amber-50" />
+                <StatCard title={TITULOS_RANGOS.preventiva} value={stats.preventiva} iconClass="fa-solid fa-bell" color="text-purple-600" bg="bg-purple-50" />
+                <StatCard title={TITULOS_RANGOS.plazo} value={stats.enPlazo} iconClass="fa-solid fa-circle-check" color="text-emerald-600" bg="bg-emerald-50" />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col h-[480px]">
+                  <h2 className="text-xl font-black mb-8 flex items-center gap-3 text-slate-800">
+                    <i className="fa-solid fa-filter text-indigo-500"></i> Estado de Alerta
+                  </h2>
+                  <div className="flex-1 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={chartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={8}
+                          dataKey="value"
+                          label={function(entry) { return `${entry.name}: ${entry.value}`; }}
+                          labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                          fontSize={11}
+                          fontWeight={700}
+                        >
+                          {chartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={
+                              (entry.name || '').toLowerCase().includes('vencido') ? COLORS.vencido :
+                              (entry.name || '').toLowerCase().includes('riesgo') ? COLORS.riesgo :
+                              (entry.name || '').toLowerCase().includes('preventiva') ? COLORS.preventiva :
+                              (entry.name || '').toLowerCase().includes('plazo') ? COLORS.plazo : COLORS.otros
+                            } strokeWidth={0} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 15px 35px rgba(0,0,0,0.1)' }} />
+                        <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ paddingTop: '20px' }}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white h-[480px]">
+                  <h2 className="text-xl font-black mb-8 flex items-center gap-3 text-slate-800">
+                    <i className="fa-solid fa-user text-blue-500"></i> Carga Actual por Especialista
+                  </h2>
+                  <div className="flex-1 w-full h-[350px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={barData} layout="vertical" margin={{ left: 40, right: 50 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" width={150} fontSize={11} tickLine={false} axisLine={false} fontStyle="bold" />
+                        <Tooltip cursor={{fill: '#f8fafc', radius: 12}} />
+                        <Bar 
+                          dataKey="documentos" 
+                          fill="#6366f1" 
+                          radius={[0, 12, 12, 0]} 
+                          barSize={28}
+                          label={{ position: 'right', fill: '#475569', fontSize: 13, fontWeight: 700 }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white overflow-hidden">
+                <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row gap-6 justify-between items-center bg-white/50 backdrop-blur-sm">
+                  <div className="relative w-full md:w-[500px]">
+                    <i className="fa-solid fa-magnifying-glass absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input 
+                      type="text" 
+                      placeholder={`Buscar en los ${data.length} documentos (ID, Asunto, Especialista)...`}
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 border-0 rounded-2xl focus:outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all text-sm font-bold placeholder:text-slate-400"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto no-scrollbar">
+                    {['Todos', 'Vencido', 'Riesgo crítico', 'Alerta preventiva', 'Dentro de plazo'].map(tag => (
+                      <button 
+                        key={tag}
+                        onClick={() => setFilterEtiqueta(tag)}
+                        className={`px-6 py-3 rounded-2xl text-[10px] font-black whitespace-nowrap transition-all duration-500 ${
+                          filterEtiqueta === tag 
+                            ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-200 scale-105' 
+                            : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                        }`}
+                      >
+                        {tag.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/30 border-b border-slate-100">
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] w-12 text-center">N°</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Referencia</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Destinatario & Gestión</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Antigüedad</th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                          <div className="flex items-center gap-2">
+                            ESTADO
+                            <select 
+                              className="bg-white border border-slate-200 rounded-lg text-indigo-600 font-bold text-[9px] uppercase p-1.5 cursor-pointer outline-none hover:bg-slate-50 transition-colors shadow-sm focus:ring-2 focus:ring-indigo-500/20"
+                              value={filterEstado}
+                              onChange={(e) => setFilterEstado(e.target.value)}
+                            >
+                              <option value="Todos">TODOS</option>
+                              <option value="RECIBIDO">RECIBIDO</option>
+                              <option value="NO LEIDO">NO LEIDO</option>
+                            </select>
+                          </div>
+                        </th>
+                        <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Prioridad</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {filteredData.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-indigo-50/20 transition-all duration-300 group">
+                          <td className="p-6 text-center">
+                            <span className="text-xs font-black text-slate-400 group-hover:text-indigo-500 transition-colors">
+                              {idx + 1}
+                            </span>
+                          </td>
+                          <td className="p-6">
+                            <div className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{row.id}</div>
+                            <div className="text-[10px] text-slate-400 font-mono mt-1 leading-tight">{row.nroDoc}</div>
+                            <div className="flex items-center gap-2 mt-4 text-[10px] font-black text-indigo-600 bg-indigo-50 w-fit px-3 py-1 rounded-lg">
+                              <i className="fa-solid fa-calendar-days text-[12px]"></i> {row.fecha}
+                            </div>
+                          </td>
+                          <td className="p-6">
+                            <div className="text-sm font-extrabold text-slate-700 mb-1">{row.destinatario}</div>
+                            <div className="text-xs text-slate-500 line-clamp-2 max-w-xl italic leading-relaxed bg-white/80 p-3 rounded-2xl border border-slate-50 shadow-sm">
+                              "{row.asunto}"
+                            </div>
+                            <div className="mt-2 text-[10px] font-black text-slate-300 uppercase tracking-tighter flex gap-2">
+                              <span>EXP: {row.expediente}</span>
+                              <span className="text-slate-200">|</span>
+                              <span>Rem: {row.remitente && row.remitente.includes('-') ? row.remitente.split('-')[1].trim() : row.remitente}</span>
+                            </div>
+                          </td>
+                          <td className="p-6 text-center">
+                            <div className={`text-xl font-black ${row.dias > 25 ? 'text-red-500 animate-pulse' : 'text-slate-700'}`}>
+                              {row.dias}<span className="text-[10px] ml-0.5 text-slate-400">d</span>
+                            </div>
+                          </td>
+                          <td className="p-6">
+                            <span className={`text-[10px] font-black px-4 py-2 rounded-xl tracking-tighter shadow-sm ${
+                              row.estado === 'RECIBIDO' ? 'text-blue-600 bg-blue-50 ring-1 ring-blue-100' : 'text-slate-500 bg-white ring-1 ring-slate-100'
+                            }`}>
+                              {row.estado}
+                            </span>
+                          </td>
+                          <td className="p-6">
+                            <div className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase text-center border-2 ${
+                              (row.etiqueta || '').toLowerCase().includes('vencido') ? 'bg-red-50 text-red-600 border-red-100 shadow-lg shadow-red-100' :
+                              (row.etiqueta || '').toLowerCase().includes('riesgo') ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                              (row.etiqueta || '').toLowerCase().includes('preventiva') ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                              (row.etiqueta || '').toLowerCase().includes('plazo') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                              'bg-slate-50 text-slate-400 border-slate-100'
+                            }`}>
+                              {row.etiqueta}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {filteredData.length === 0 && (
+                    <div className="p-24 text-center">
+                      <div className="bg-slate-50 w-28 h-28 rounded-[3rem] flex items-center justify-center mx-auto mb-6 rotate-12 group-hover:rotate-0 transition-transform">
+                        <i className="fa-solid fa-magnifying-glass text-[48px] text-slate-200"></i>
+                      </div>
+                      <p className="text-slate-400 font-black text-xl tracking-tight">Cero coincidencias</p>
+                      <p className="text-slate-300 text-sm font-bold">Verifica el ID o el nombre del especialista.</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="p-8 bg-slate-50/30 flex flex-col md:flex-row justify-between items-center gap-4 border-t border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Base de Datos Consolidada - 2026</p>
+                  <div className="flex flex-wrap items-center justify-center gap-4">
+                    <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-200" /> VENCIDO
+                    </span>
+                    <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-200" /> RIESGO CRÍTICO
+                    </span>
+                    <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                      <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm shadow-purple-200" /> ALERTA PREVENTIVA
+                    </span>
+                    <span className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" /> DENTRO DEL PLAZO
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const StatCard = ({ title, value, iconClass, color, bg }) => (
+          <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/40 border border-white flex items-center justify-between group hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 ease-out">
+            <div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">{title}</p>
+              <p className="text-5xl font-black text-slate-900 tracking-tighter">{value}</p>
+            </div>
+            <div className={`p-6 rounded-[2rem] ${bg} ${color} group-hover:rotate-12 group-hover:scale-110 transition-all duration-500 shadow-inner flex items-center justify-center w-20 h-20`}>
+              <i className={`${iconClass} text-4xl`}></i>
+            </div>
+          </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
